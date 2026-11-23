@@ -1,5 +1,6 @@
 using Android.Content;
 using Android.OS;
+using Android.Provider;
 using Android.Support.V4.Media;
 using Android.Support.V4.Media.Session;
 using AndroidX.Media3.Common;
@@ -301,17 +302,46 @@ public static class MediaSessionManager
 			{
 				var library = AndroidMusicLibraryService.Instance;
 				await library.BuildIndexAsync();
-				var result = musicSearchService.Search(query ?? string.Empty);
+				var searchPhrase = GetSearchPhrase(query, extras);
+				var result = musicSearchService.Search(searchPhrase);
 				if (result.Tracks.Count > 0)
 					PlayTracks(Android.App.Application.Context, result.Tracks);
 				else
+				{
+					Android.Util.Log.Warn(
+						"AndroidAutoMedia",
+						$"No local track matched Android Auto search: {searchPhrase}");
 					SetPlaybackState(PlaybackStateCompat.StateError);
+				}
 			}
 			catch (Exception exception)
 			{
 				Android.Util.Log.Error("AndroidAutoMedia", $"Music search failed: {exception}");
 				SetPlaybackState(PlaybackStateCompat.StateError);
 			}
+		}
+
+		private static string GetSearchPhrase(string? query, Bundle? extras)
+		{
+			var focus = extras?.GetString(MediaStore.ExtraMediaFocus);
+			var title = extras?.GetString(MediaStore.ExtraMediaTitle);
+			var artist = extras?.GetString(MediaStore.ExtraMediaArtist);
+			var album = extras?.GetString(MediaStore.ExtraMediaAlbum);
+
+			if (!string.IsNullOrWhiteSpace(title) && !string.IsNullOrWhiteSpace(artist))
+				return $"{title} by {artist}";
+			if (!string.IsNullOrWhiteSpace(album) &&
+				(string.IsNullOrWhiteSpace(title) ||
+				 focus?.Contains("album", StringComparison.OrdinalIgnoreCase) == true))
+				return $"album {album}";
+			if (!string.IsNullOrWhiteSpace(artist) &&
+				(string.IsNullOrWhiteSpace(title) ||
+				 focus?.Contains("artist", StringComparison.OrdinalIgnoreCase) == true))
+				return $"songs by {artist}";
+			if (!string.IsNullOrWhiteSpace(title))
+				return title;
+
+			return query ?? string.Empty;
 		}
 
 		public override async void OnPlayFromMediaId(string? mediaId, Bundle? extras)
