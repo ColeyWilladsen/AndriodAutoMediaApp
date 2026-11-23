@@ -71,22 +71,34 @@ public static class MediaSessionManager
 			context.StartService(intent);
 	}
 
-	internal static void StartPlayback(string uri, string title, string artist)
+	internal static void StartPlayback(
+		string uri,
+		string title,
+		string artist,
+		long startPosition = 0,
+		bool playWhenReady = true)
 	{
 		if (currentQueue.Count == 0 || currentQueue[0].ContentUri != uri)
 			currentQueue = new[] { new MusicTrack(title, artist, "Unknown album", 0, uri) };
 		currentTrack = currentQueue[0];
-		var activePlayer = player ??= new ExoPlayerBuilder(Android.App.Application.Context).Build()
+		var playerBuilder = new ExoPlayerBuilder(Android.App.Application.Context);
+		playerBuilder.SetWakeMode(C.WakeModeLocal);
+		var activePlayer = player ??= playerBuilder.Build()
 			?? throw new InvalidOperationException("Could not initialize the media player.");
 		var audioAttributesBuilder = new AudioAttributes.Builder();
 		audioAttributesBuilder.SetUsage(C.UsageMedia);
 		audioAttributesBuilder.SetContentType(C.AudioContentTypeMusic);
-		activePlayer.SetAudioAttributes(audioAttributesBuilder.Build(), true);
+		var audioAttributes = audioAttributesBuilder.Build()
+			?? throw new InvalidOperationException("Could not configure audio focus attributes.");
+		activePlayer.SetAudioAttributes(audioAttributes, true);
 		activePlayer.SetMediaItem(MediaItem.FromUri(Android.Net.Uri.Parse(uri)!));
 		foreach (var track in currentQueue.Skip(1))
 			activePlayer.AddMediaItem(MediaItem.FromUri(Android.Net.Uri.Parse(track.ContentUri)!));
 		activePlayer.Prepare();
-		activePlayer.Play();
+		if (startPosition > 0)
+			activePlayer.SeekTo(startPosition);
+		if (playWhenReady)
+			activePlayer.Play();
 		playerNeedsPrepare = false;
 
 		var metadata = new MediaMetadataCompat.Builder();
@@ -94,7 +106,10 @@ public static class MediaSessionManager
 		metadata.PutString(MediaMetadataCompat.MetadataKeyArtist, artist);
 		metadata.PutString(MediaMetadataCompat.MetadataKeyAlbum, currentTrack.Album);
 		session?.SetMetadata(metadata.Build());
-		SetPlaybackState(PlaybackStateCompat.StatePlaying);
+		SetPlaybackState(playWhenReady
+			? PlaybackStateCompat.StatePlaying
+			: PlaybackStateCompat.StatePaused);
+		PersistPlaybackState();
 	}
 
 	internal static void RequestResumePlayback()
@@ -104,8 +119,13 @@ public static class MediaSessionManager
 
 		var intent = new Intent(Android.App.Application.Context, typeof(MediaPlaybackService));
 		intent.SetAction(MediaPlaybackService.ActionResume);
-		intent.PutExtra(MediaPlaybackService.ExtraTitle, currentTrack.Title);
-		intent.PutExtra(MediaPlaybackService.ExtraArtist, currentTrack.Artist);
+		if (currentTrack is not null)
+		{
+			intent.PutExtra(MediaPlaybackService.ExtraUri, currentTrack.ContentUri);
+			intent.PutExtra(MediaPlaybackService.ExtraTitle, currentTrack.Title);
+			intent.PutExtra(MediaPlaybackService.ExtraArtist, currentTrack.Artist);
+			intent.PutExtra(MediaPlaybackService.ExtraPosition, player?.CurrentPosition ?? 0);
+		}
 		if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
 			Android.App.Application.Context.StartForegroundService(intent);
 		else
@@ -114,24 +134,33 @@ public static class MediaSessionManager
 
 	internal static void ResumePlayback()
 	{
-		if (currentTrack is null)
+		var track = currentTrack;
+		if (track is null)
 			return;
 
 		var activePlayer = player;
 		if (activePlayer is null || playerNeedsPrepare)
 		{
-			StartPlayback(currentTrack.ContentUri, currentTrack.Title, currentTrack.Artist);
+			var savedState = MediaPlaybackService.LoadPlaybackState();
+			if (savedState is not null && savedState.Track.ContentUri == track.ContentUri)
+				RestorePlayback(savedState with { IsPlaying = true });
+			else
+				StartPlayback(track.ContentUri, track.Title, track.Artist);
 			return;
 		}
 
 		activePlayer.Play();
 		SetPlaybackState(PlaybackStateCompat.StatePlaying);
+		PersistPlaybackState();
+		MediaPlaybackService.RefreshNotification();
 	}
 
 	internal static void PausePlayback()
 	{
 		player?.Pause();
 		SetPlaybackState(PlaybackStateCompat.StatePaused);
+		PersistPlaybackState();
+		MediaPlaybackService.RefreshNotification();
 	}
 
 	internal static void SkipToNext()
@@ -142,6 +171,8 @@ public static class MediaSessionManager
 		player.SeekToNextMediaItem();
 		UpdateCurrentTrackFromQueue();
 		SetPlaybackState(PlaybackStateCompat.StatePlaying);
+		PersistPlaybackState();
+		MediaPlaybackService.RefreshNotification();
 	}
 
 	internal static void SkipToPrevious()
@@ -158,6 +189,8 @@ public static class MediaSessionManager
 
 		UpdateCurrentTrackFromQueue();
 		SetPlaybackState(PlaybackStateCompat.StatePlaying);
+		PersistPlaybackState();
+		MediaPlaybackService.RefreshNotification();
 	}
 
 	internal static void SeekTo(long position)
@@ -169,6 +202,7 @@ public static class MediaSessionManager
 		SetPlaybackState(player.IsPlaying
 			? PlaybackStateCompat.StatePlaying
 			: PlaybackStateCompat.StatePaused);
+		PersistPlaybackState();
 	}
 
 	internal static void StopPlayback()
@@ -176,15 +210,51 @@ public static class MediaSessionManager
 		player?.Stop();
 		playerNeedsPrepare = true;
 		SetPlaybackState(PlaybackStateCompat.StateStopped);
+		MediaPlaybackService.ClearPlaybackState();
+		currentTrack = null;
+		currentQueue = Array.Empty<MusicTrack>();
 		Android.App.Application.Context.StopService(
 			new Intent(Android.App.Application.Context, typeof(MediaPlaybackService)));
+	}
+
+	internal static PlaybackSnapshot? GetPlaybackSnapshot()
+	{
+		if (currentTrack is null)
+			return null;
+
+		return new PlaybackSnapshot(
+			currentTrack,
+			player?.CurrentPosition ?? 0,
+			player?.IsPlaying ?? false);
+	}
+
+	internal static void RestorePlayback(PlaybackSnapshot snapshot)
+	{
+		currentTrack = snapshot.Track;
+		currentQueue = new[] { snapshot.Track };
+		StartPlayback(
+			snapshot.Track.ContentUri,
+			snapshot.Track.Title,
+			snapshot.Track.Artist,
+			snapshot.Position,
+			snapshot.IsPlaying);
+	}
+
+	private static void PersistPlaybackState()
+	{
+		var snapshot = GetPlaybackSnapshot();
+		if (snapshot is not null)
+			MediaPlaybackService.SavePlaybackState(snapshot);
 	}
 
 	internal static void ReleasePlayer()
 	{
 		player?.Release();
 		player = null;
+		playerNeedsPrepare = true;
 	}
+
+	internal sealed record PlaybackSnapshot(MusicTrack Track, long Position, bool IsPlaying);
 
 	private static void UpdateCurrentTrackFromQueue()
 	{

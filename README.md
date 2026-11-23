@@ -25,6 +25,11 @@ The media session advertises play, pause, stop, seek, and available skip actions
 to Android Auto. Previous-track control restarts the current track when it has
 played for more than three seconds; otherwise it moves to the previous queued track.
 
+Playback runs in a media-playback foreground service with a MediaStyle notification
+linked to the session. ExoPlayer handles audio focus, and the current track and
+playback position are periodically saved so playback can be restored if Android
+recreates the service. Android 13 and later also request notification permission.
+
 ## Build
 
 ```text

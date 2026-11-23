@@ -35,9 +35,13 @@ public partial class MainPage : ContentPage
 			return;
 
 		isIndexing = true;
-		StatusLabel.Text = "Indexing music on this device…";
 		try
 		{
+			if (Android.OS.Build.VERSION.SdkInt >= Android.OS.BuildVersionCodes.Tiramisu &&
+				await Permissions.CheckStatusAsync<Permissions.PostNotifications>() != PermissionStatus.Granted)
+				await Permissions.RequestAsync<Permissions.PostNotifications>();
+
+			StatusLabel.Text = "Indexing music on this device…";
 			var count = await musicLibraryService.BuildIndexAsync();
 			StatusLabel.Text = $"Indexed {count} songs. Connect Android Auto and ask Assistant to play music.";
 		}
