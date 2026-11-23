@@ -16,7 +16,10 @@ The browser service also exposes the device's music tracks for browsing. On Andr
 `READ_EXTERNAL_STORAGE`. After permission is granted, the app indexes all audio
 entries exposed by `MediaStore.Audio.Media`, including title, artist, album,
 duration, and content URI. Android Auto browsing and Assistant searches use this
-local index.
+local index. `IMusicSearchService` uses Levenshtein similarity to resolve song
+titles, titles with an artist, artist requests (for example, "songs by Metallica"),
+and album requests (for example, "album Fear Inoculum"). Artist and album matches
+are queued for playback.
 
 ## Build
 

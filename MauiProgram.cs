@@ -15,6 +15,7 @@ public static class MauiProgram
 				fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
 			});
 		builder.Services.AddSingleton<IMusicLibraryService>(AndroidMusicLibraryService.Instance);
+		builder.Services.AddSingleton<IMusicSearchService, MusicSearchService>();
 
 #if DEBUG
 		builder.Logging.AddDebug();

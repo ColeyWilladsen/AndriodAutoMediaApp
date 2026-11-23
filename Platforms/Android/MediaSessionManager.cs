@@ -13,6 +13,9 @@ public static class MediaSessionManager
 	private static MediaSessionCompat? session;
 	private static IExoPlayer? player;
 	private static MusicTrack? currentTrack;
+	private static IReadOnlyList<MusicTrack> currentQueue = Array.Empty<MusicTrack>();
+	private static readonly IMusicSearchService musicSearchService =
+		new MusicSearchService(AndroidMusicLibraryService.Instance);
 	private static bool playerNeedsPrepare;
 
 	public static MediaSessionCompat GetOrCreate(Context context)
@@ -43,12 +46,24 @@ public static class MediaSessionManager
 
 	private static void PlayTrack(Context context, MusicTrack track)
 	{
-		currentTrack = track;
+		PlayTracks(context, new[] { track });
+	}
+
+	private static void PlayTracks(Context context, IReadOnlyList<MusicTrack> tracks)
+	{
+		if (tracks.Count == 0)
+		{
+			SetPlaybackState(PlaybackStateCompat.StateError);
+			return;
+		}
+
+		currentQueue = tracks;
+		currentTrack = tracks[0];
 		var intent = new Intent(context, typeof(MediaPlaybackService));
 		intent.SetAction(MediaPlaybackService.ActionPlay);
-		intent.PutExtra(MediaPlaybackService.ExtraUri, track.ContentUri);
-		intent.PutExtra(MediaPlaybackService.ExtraTitle, track.Title);
-		intent.PutExtra(MediaPlaybackService.ExtraArtist, track.Artist);
+		intent.PutExtra(MediaPlaybackService.ExtraUri, currentTrack.ContentUri);
+		intent.PutExtra(MediaPlaybackService.ExtraTitle, currentTrack.Title);
+		intent.PutExtra(MediaPlaybackService.ExtraArtist, currentTrack.Artist);
 
 		if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
 			context.StartForegroundService(intent);
@@ -58,7 +73,9 @@ public static class MediaSessionManager
 
 	internal static void StartPlayback(string uri, string title, string artist)
 	{
-		currentTrack ??= new MusicTrack(title, artist, "Unknown album", 0, uri);
+		if (currentQueue.Count == 0 || currentQueue[0].ContentUri != uri)
+			currentQueue = new[] { new MusicTrack(title, artist, "Unknown album", 0, uri) };
+		currentTrack = currentQueue[0];
 		var activePlayer = player ??= new ExoPlayerBuilder(Android.App.Application.Context).Build()
 			?? throw new InvalidOperationException("Could not initialize the media player.");
 		var audioAttributesBuilder = new AudioAttributes.Builder();
@@ -66,6 +83,8 @@ public static class MediaSessionManager
 		audioAttributesBuilder.SetContentType(C.AudioContentTypeMusic);
 		activePlayer.SetAudioAttributes(audioAttributesBuilder.Build(), true);
 		activePlayer.SetMediaItem(MediaItem.FromUri(Android.Net.Uri.Parse(uri)!));
+		foreach (var track in currentQueue.Skip(1))
+			activePlayer.AddMediaItem(MediaItem.FromUri(Android.Net.Uri.Parse(track.ContentUri)!));
 		activePlayer.Prepare();
 		activePlayer.Play();
 		playerNeedsPrepare = false;
@@ -151,9 +170,9 @@ public static class MediaSessionManager
 			{
 				var library = AndroidMusicLibraryService.Instance;
 				await library.BuildIndexAsync();
-				var track = library.Search(query).FirstOrDefault();
-				if (track is not null)
-					PlayTrack(Android.App.Application.Context, track);
+				var result = musicSearchService.Search(query ?? string.Empty);
+				if (result.Tracks.Count > 0)
+					PlayTracks(Android.App.Application.Context, result.Tracks);
 				else
 					SetPlaybackState(PlaybackStateCompat.StateError);
 			}
