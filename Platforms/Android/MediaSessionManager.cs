@@ -134,6 +134,43 @@ public static class MediaSessionManager
 		SetPlaybackState(PlaybackStateCompat.StatePaused);
 	}
 
+	internal static void SkipToNext()
+	{
+		if (player?.HasNextMediaItem != true)
+			return;
+
+		player.SeekToNextMediaItem();
+		UpdateCurrentTrackFromQueue();
+		SetPlaybackState(PlaybackStateCompat.StatePlaying);
+	}
+
+	internal static void SkipToPrevious()
+	{
+		if (player is null)
+			return;
+
+		if (player.CurrentPosition > 3000)
+			player.SeekTo(0);
+		else if (player.HasPreviousMediaItem)
+			player.SeekToPreviousMediaItem();
+		else
+			return;
+
+		UpdateCurrentTrackFromQueue();
+		SetPlaybackState(PlaybackStateCompat.StatePlaying);
+	}
+
+	internal static void SeekTo(long position)
+	{
+		if (player is null)
+			return;
+
+		player.SeekTo(Math.Max(0, position));
+		SetPlaybackState(player.IsPlaying
+			? PlaybackStateCompat.StatePlaying
+			: PlaybackStateCompat.StatePaused);
+	}
+
 	internal static void StopPlayback()
 	{
 		player?.Stop();
@@ -149,6 +186,23 @@ public static class MediaSessionManager
 		player = null;
 	}
 
+	private static void UpdateCurrentTrackFromQueue()
+	{
+		if (player is null)
+			return;
+
+		var index = player.CurrentMediaItemIndex;
+		if (index < 0 || index >= currentQueue.Count)
+			return;
+
+		currentTrack = currentQueue[index];
+		var metadata = new MediaMetadataCompat.Builder();
+		metadata.PutString(MediaMetadataCompat.MetadataKeyTitle, currentTrack.Title);
+		metadata.PutString(MediaMetadataCompat.MetadataKeyArtist, currentTrack.Artist);
+		metadata.PutString(MediaMetadataCompat.MetadataKeyAlbum, currentTrack.Album);
+		session?.SetMetadata(metadata.Build());
+	}
+
 	private static void SetPlaybackState(int state)
 	{
 		var actions = PlaybackStateCompat.ActionPlay |
@@ -156,6 +210,13 @@ public static class MediaSessionManager
 			PlaybackStateCompat.ActionPlayFromSearch |
 			PlaybackStateCompat.ActionPlayFromMediaId |
 			PlaybackStateCompat.ActionStop;
+		if (player?.HasNextMediaItem == true)
+			actions |= PlaybackStateCompat.ActionSkipToNext;
+		if (player?.HasPreviousMediaItem == true || player?.CurrentPosition > 3000)
+			actions |= PlaybackStateCompat.ActionSkipToPrevious;
+		if (player is not null)
+			actions |= PlaybackStateCompat.ActionSeekTo;
+
 		var playbackState = new PlaybackStateCompat.Builder();
 		playbackState.SetActions((long)actions);
 		playbackState.SetState(state, player?.CurrentPosition ?? 0, 1f);
@@ -213,5 +274,11 @@ public static class MediaSessionManager
 		public override void OnPause() => PausePlayback();
 
 		public override void OnStop() => StopPlayback();
+
+		public override void OnSkipToNext() => SkipToNext();
+
+		public override void OnSkipToPrevious() => SkipToPrevious();
+
+		public override void OnSeekTo(long position) => SeekTo(position);
 	}
 }

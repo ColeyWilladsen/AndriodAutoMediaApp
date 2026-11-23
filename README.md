@@ -21,6 +21,10 @@ titles, titles with an artist, artist requests (for example, "songs by Metallica
 and album requests (for example, "album Fear Inoculum"). Artist and album matches
 are queued for playback.
 
+The media session advertises play, pause, stop, seek, and available skip actions
+to Android Auto. Previous-track control restarts the current track when it has
+played for more than three seconds; otherwise it moves to the previous queued track.
+
 ## Build
 
 ```text
