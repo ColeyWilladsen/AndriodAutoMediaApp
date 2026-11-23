@@ -13,7 +13,10 @@ Android-only .NET MAUI media app that exposes local music to Android Auto throug
 
 The browser service also exposes the device's music tracks for browsing. On Android
 13 and later the app requests `READ_MEDIA_AUDIO`; earlier Android versions use
-`READ_EXTERNAL_STORAGE`.
+`READ_EXTERNAL_STORAGE`. After permission is granted, the app indexes all audio
+entries exposed by `MediaStore.Audio.Media`, including title, artist, album,
+duration, and content URI. Android Auto browsing and Assistant searches use this
+local index.
 
 ## Build
 

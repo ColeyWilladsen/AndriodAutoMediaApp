@@ -1,7 +1,5 @@
 using Android.Content;
-using Android.Database;
 using Android.OS;
-using Android.Provider;
 using Android.Support.V4.Media;
 using Android.Support.V4.Media.Session;
 using AndroidX.Media3.Common;
@@ -14,7 +12,7 @@ public static class MediaSessionManager
 	private static readonly object SyncRoot = new();
 	private static MediaSessionCompat? session;
 	private static IExoPlayer? player;
-	private static LocalTrack? currentTrack;
+	private static MusicTrack? currentTrack;
 	private static bool playerNeedsPrepare;
 
 	public static MediaSessionCompat GetOrCreate(Context context)
@@ -43,67 +41,12 @@ public static class MediaSessionManager
 		return context.CheckSelfPermission(permission) == Android.Content.PM.Permission.Granted;
 	}
 
-	public static List<LocalTrack> FindLocalTracks(Context context, string? searchQuery)
-	{
-		if (!HasAudioPermission(context))
-			return new List<LocalTrack>();
-
-		var projection = new[]
-		{
-			MediaStore.Audio.Media.InterfaceConsts.Id,
-			MediaStore.Audio.Media.InterfaceConsts.Title,
-			MediaStore.Audio.Media.InterfaceConsts.Artist
-		};
-		var selection = $"{MediaStore.Audio.Media.InterfaceConsts.IsMusic} != 0";
-		string[]? selectionArgs = null;
-		if (!string.IsNullOrWhiteSpace(searchQuery))
-		{
-			selection += $" AND ({MediaStore.Audio.Media.InterfaceConsts.Title} LIKE ? " +
-				$"OR {MediaStore.Audio.Media.InterfaceConsts.Artist} LIKE ? " +
-				$"OR {MediaStore.Audio.Media.InterfaceConsts.Album} LIKE ?)";
-			var pattern = $"%{searchQuery.Trim()}%";
-			selectionArgs = new[] { pattern, pattern, pattern };
-		}
-
-		var audioCollection = MediaStore.Audio.Media.ExternalContentUri
-			?? throw new InvalidOperationException("The device audio collection is unavailable.");
-		var contentResolver = context.ContentResolver
-			?? throw new InvalidOperationException("The device media provider is unavailable.");
-		using ICursor? cursor = contentResolver.Query(
-			audioCollection,
-			projection,
-			selection,
-			selectionArgs,
-			$"{MediaStore.Audio.Media.InterfaceConsts.Title} COLLATE NOCASE ASC");
-
-		if (cursor is null)
-			throw new InvalidOperationException("The device media provider returned no audio cursor.");
-
-		var tracks = new List<LocalTrack>();
-		var idColumn = cursor.GetColumnIndexOrThrow(MediaStore.Audio.Media.InterfaceConsts.Id);
-		var titleColumn = cursor.GetColumnIndexOrThrow(MediaStore.Audio.Media.InterfaceConsts.Title);
-		var artistColumn = cursor.GetColumnIndexOrThrow(MediaStore.Audio.Media.InterfaceConsts.Artist);
-
-		while (cursor.MoveToNext())
-		{
-			var contentUri = ContentUris.WithAppendedId(
-				audioCollection,
-				cursor.GetLong(idColumn));
-			tracks.Add(new LocalTrack(
-				contentUri.ToString()!,
-				cursor.GetString(titleColumn) ?? "Unknown title",
-				cursor.GetString(artistColumn) ?? "Unknown artist"));
-		}
-
-		return tracks;
-	}
-
-	private static void PlayTrack(Context context, LocalTrack track)
+	private static void PlayTrack(Context context, MusicTrack track)
 	{
 		currentTrack = track;
 		var intent = new Intent(context, typeof(MediaPlaybackService));
 		intent.SetAction(MediaPlaybackService.ActionPlay);
-		intent.PutExtra(MediaPlaybackService.ExtraUri, track.Uri);
+		intent.PutExtra(MediaPlaybackService.ExtraUri, track.ContentUri);
 		intent.PutExtra(MediaPlaybackService.ExtraTitle, track.Title);
 		intent.PutExtra(MediaPlaybackService.ExtraArtist, track.Artist);
 
@@ -115,7 +58,7 @@ public static class MediaSessionManager
 
 	internal static void StartPlayback(string uri, string title, string artist)
 	{
-		currentTrack = new LocalTrack(uri, title, artist);
+		currentTrack ??= new MusicTrack(title, artist, "Unknown album", 0, uri);
 		var activePlayer = player ??= new ExoPlayerBuilder(Android.App.Application.Context).Build()
 			?? throw new InvalidOperationException("Could not initialize the media player.");
 		var audioAttributesBuilder = new AudioAttributes.Builder();
@@ -130,6 +73,7 @@ public static class MediaSessionManager
 		var metadata = new MediaMetadataCompat.Builder();
 		metadata.PutString(MediaMetadataCompat.MetadataKeyTitle, title);
 		metadata.PutString(MediaMetadataCompat.MetadataKeyArtist, artist);
+		metadata.PutString(MediaMetadataCompat.MetadataKeyAlbum, currentTrack.Album);
 		session?.SetMetadata(metadata.Build());
 		SetPlaybackState(PlaybackStateCompat.StatePlaying);
 	}
@@ -157,7 +101,7 @@ public static class MediaSessionManager
 		var activePlayer = player;
 		if (activePlayer is null || playerNeedsPrepare)
 		{
-			StartPlayback(currentTrack.Uri, currentTrack.Title, currentTrack.Artist);
+			StartPlayback(currentTrack.ContentUri, currentTrack.Title, currentTrack.Artist);
 			return;
 		}
 
@@ -201,18 +145,26 @@ public static class MediaSessionManager
 
 	private sealed class PlaybackCallback : MediaSessionCompat.Callback
 	{
-		public override void OnPlayFromSearch(string? query, Bundle? extras)
+		public override async void OnPlayFromSearch(string? query, Bundle? extras)
 		{
-			var track = FindLocalTracks(
-				Android.App.Application.Context,
-				string.IsNullOrWhiteSpace(query) ? null : query).FirstOrDefault();
-			if (track is not null)
-				PlayTrack(Android.App.Application.Context, track);
-			else
+			try
+			{
+				var library = AndroidMusicLibraryService.Instance;
+				await library.BuildIndexAsync();
+				var track = library.Search(query).FirstOrDefault();
+				if (track is not null)
+					PlayTrack(Android.App.Application.Context, track);
+				else
+					SetPlaybackState(PlaybackStateCompat.StateError);
+			}
+			catch (Exception exception)
+			{
+				Android.Util.Log.Error("AndroidAutoMedia", $"Music search failed: {exception}");
 				SetPlaybackState(PlaybackStateCompat.StateError);
+			}
 		}
 
-		public override void OnPlayFromMediaId(string? mediaId, Bundle? extras)
+		public override async void OnPlayFromMediaId(string? mediaId, Bundle? extras)
 		{
 			if (string.IsNullOrWhiteSpace(mediaId))
 			{
@@ -220,12 +172,21 @@ public static class MediaSessionManager
 				return;
 			}
 
-			var track = FindLocalTracks(Android.App.Application.Context, null)
-				.FirstOrDefault(item => item.Uri == mediaId);
-			if (track is not null)
-				PlayTrack(Android.App.Application.Context, track);
-			else
+			try
+			{
+				var library = AndroidMusicLibraryService.Instance;
+				await library.BuildIndexAsync();
+				var track = library.FindByContentUri(mediaId);
+				if (track is not null)
+					PlayTrack(Android.App.Application.Context, track);
+				else
+					SetPlaybackState(PlaybackStateCompat.StateError);
+			}
+			catch (Exception exception)
+			{
+				Android.Util.Log.Error("AndroidAutoMedia", $"Media item lookup failed: {exception}");
 				SetPlaybackState(PlaybackStateCompat.StateError);
+			}
 		}
 
 		public override void OnPlay() => RequestResumePlayback();
@@ -235,5 +196,3 @@ public static class MediaSessionManager
 		public override void OnStop() => StopPlayback();
 	}
 }
-
-public sealed record LocalTrack(string Uri, string Title, string Artist);

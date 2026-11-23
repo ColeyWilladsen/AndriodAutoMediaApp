@@ -1,16 +1,17 @@
-﻿using Microsoft.Extensions.DependencyInjection;
-
-namespace AndroidAutoMediaApp;
+﻿namespace AndroidAutoMediaApp;
 
 public partial class App : Application
 {
-	public App()
+	private readonly IMusicLibraryService musicLibraryService;
+
+	public App(IMusicLibraryService musicLibraryService)
 	{
+		this.musicLibraryService = musicLibraryService;
 		InitializeComponent();
 	}
 
 	protected override Window CreateWindow(IActivationState? activationState)
 	{
-		return new Window(new AppShell());
+		return new Window(new AppShell(musicLibraryService));
 	}
 }
