@@ -50,6 +50,12 @@ public static class MediaSessionManager
 		PlayTracks(context, new[] { track });
 	}
 
+	public static void Play(MusicTrack track) =>
+		PlayTracks(Android.App.Application.Context, new[] { track });
+
+	public static void Play(IReadOnlyList<MusicTrack> tracks) =>
+		PlayTracks(Android.App.Application.Context, tracks);
+
 	private static void PlayTracks(Context context, IReadOnlyList<MusicTrack> tracks)
 	{
 		if (tracks.Count == 0)
@@ -115,18 +121,17 @@ public static class MediaSessionManager
 
 	internal static void RequestResumePlayback()
 	{
-		if (currentTrack is null)
+		var track = currentTrack ?? MediaPlaybackService.LoadPlaybackState()?.Track;
+		if (track is null)
 			return;
+		currentTrack = track;
 
 		var intent = new Intent(Android.App.Application.Context, typeof(MediaPlaybackService));
 		intent.SetAction(MediaPlaybackService.ActionResume);
-		if (currentTrack is not null)
-		{
-			intent.PutExtra(MediaPlaybackService.ExtraUri, currentTrack.ContentUri);
-			intent.PutExtra(MediaPlaybackService.ExtraTitle, currentTrack.Title);
-			intent.PutExtra(MediaPlaybackService.ExtraArtist, currentTrack.Artist);
-			intent.PutExtra(MediaPlaybackService.ExtraPosition, player?.CurrentPosition ?? 0);
-		}
+		intent.PutExtra(MediaPlaybackService.ExtraUri, track.ContentUri);
+		intent.PutExtra(MediaPlaybackService.ExtraTitle, track.Title);
+		intent.PutExtra(MediaPlaybackService.ExtraArtist, track.Artist);
+		intent.PutExtra(MediaPlaybackService.ExtraPosition, player?.CurrentPosition ?? 0);
 		if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
 			Android.App.Application.Context.StartForegroundService(intent);
 		else
@@ -156,7 +161,7 @@ public static class MediaSessionManager
 		MediaPlaybackService.RefreshNotification();
 	}
 
-	internal static void PausePlayback()
+	public static void PausePlayback()
 	{
 		player?.Pause();
 		SetPlaybackState(PlaybackStateCompat.StatePaused);
@@ -164,7 +169,7 @@ public static class MediaSessionManager
 		MediaPlaybackService.RefreshNotification();
 	}
 
-	internal static void SkipToNext()
+	public static void SkipToNext()
 	{
 		if (player?.HasNextMediaItem != true)
 			return;
@@ -176,7 +181,7 @@ public static class MediaSessionManager
 		MediaPlaybackService.RefreshNotification();
 	}
 
-	internal static void SkipToPrevious()
+	public static void SkipToPrevious()
 	{
 		if (player is null)
 			return;
@@ -194,7 +199,7 @@ public static class MediaSessionManager
 		MediaPlaybackService.RefreshNotification();
 	}
 
-	internal static void SeekTo(long position)
+	public static void SeekTo(long position)
 	{
 		if (player is null)
 			return;
@@ -206,7 +211,7 @@ public static class MediaSessionManager
 		PersistPlaybackState();
 	}
 
-	internal static void StopPlayback()
+	public static void StopPlayback()
 	{
 		player?.Stop();
 		playerNeedsPrepare = true;
@@ -218,10 +223,10 @@ public static class MediaSessionManager
 			new Intent(Android.App.Application.Context, typeof(MediaPlaybackService)));
 	}
 
-	internal static PlaybackSnapshot? GetPlaybackSnapshot()
+	public static PlaybackSnapshot? GetPlaybackSnapshot()
 	{
 		if (currentTrack is null)
-			return null;
+			return MediaPlaybackService.LoadPlaybackState();
 
 		return new PlaybackSnapshot(
 			currentTrack,
@@ -255,7 +260,7 @@ public static class MediaSessionManager
 		playerNeedsPrepare = true;
 	}
 
-	internal sealed record PlaybackSnapshot(MusicTrack Track, long Position, bool IsPlaying);
+	public sealed record PlaybackSnapshot(MusicTrack Track, long Position, bool IsPlaying);
 
 	private static void UpdateCurrentTrackFromQueue()
 	{

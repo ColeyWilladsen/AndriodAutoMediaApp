@@ -1,17 +1,315 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
-             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             x:Class="AndroidAutoMediaApp.MainPage"
-             Title="Android Auto Music">
-    <VerticalStackLayout Padding="24" Spacing="16" VerticalOptions="Center">
-        <Label Text="Android Auto Music"
-               FontSize="24"
-               FontAttributes="Bold"
-               SemanticProperties.HeadingLevel="Level1" />
-        <Label x:Name="StatusLabel"
-               Text="Allow audio access to browse and play music stored on this device."
-               SemanticProperties.Description="Audio library access status" />
-        <Button Text="Allow audio access"
-                Clicked="OnGrantAudioAccessClicked" />
-    </VerticalStackLayout>
+<ContentPage
+    x:Class="AndroidAutoMediaApp.MainPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    BackgroundColor="#090C0F">
+
+    <ContentPage.Resources>
+        <Color x:Key="Accent">#B8F36B</Color>
+        <Color x:Key="Surface">#14191E</Color>
+        <Color x:Key="Muted">#8C969D</Color>
+
+        <DataTemplate x:Key="TrackTemplate">
+            <Grid ColumnDefinitions="46,*,Auto,Auto,Auto" Padding="0,8" ColumnSpacing="8">
+                <Border Grid.Column="0" HeightRequest="42" WidthRequest="42" StrokeThickness="0"
+                        BackgroundColor="#20282E" StrokeShape="RoundRectangle 13">
+                    <Label Text="♫" FontSize="20" TextColor="{StaticResource Accent}"
+                           HorizontalOptions="Center" VerticalOptions="Center" />
+                </Border>
+                <VerticalStackLayout Grid.Column="1" Spacing="3" VerticalOptions="Center">
+                    <Label Text="{Binding Title}" FontSize="14" FontAttributes="Bold"
+                           TextColor="#F4F6F2" LineBreakMode="TailTruncation" />
+                    <Label Text="{Binding Artist}" FontSize="12" TextColor="{StaticResource Muted}"
+                           LineBreakMode="TailTruncation" />
+                </VerticalStackLayout>
+                <Button Grid.Column="2" Text="♡" FontSize="22" Padding="5,0" WidthRequest="38"
+                        BackgroundColor="Transparent" TextColor="{StaticResource Accent}"
+                        CommandParameter="{Binding .}" Clicked="OnFavoriteClicked" />
+                <Button Grid.Column="3" Text="+" FontSize="22" Padding="5,0" WidthRequest="38"
+                        BackgroundColor="Transparent" TextColor="#D0D6D1"
+                        CommandParameter="{Binding .}" Clicked="OnAddToPlaylistClicked" />
+                <Button Grid.Column="4" Text="▶" FontSize="14" Padding="5,0" WidthRequest="34"
+                        BackgroundColor="Transparent" TextColor="{StaticResource Accent}"
+                        CommandParameter="{Binding .}" Clicked="OnPlayTrackClicked" />
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate x:Key="PlaylistTemplate">
+            <Border Margin="0,5" Padding="15" BackgroundColor="{StaticResource Surface}"
+                    Stroke="#242C31" StrokeThickness="1" StrokeShape="RoundRectangle 17">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                    <VerticalStackLayout Spacing="4" VerticalOptions="Center">
+                        <Label Text="{Binding Name}" FontSize="15" FontAttributes="Bold" TextColor="#F4F6F2" />
+                        <Label Text="{Binding TrackCountLabel}" FontSize="12" TextColor="{StaticResource Muted}" />
+                    </VerticalStackLayout>
+                    <Button Grid.Column="1" Text="▶" WidthRequest="42" HeightRequest="42" Padding="0"
+                            BackgroundColor="#29352B" TextColor="{StaticResource Accent}"
+                            CornerRadius="21" CommandParameter="{Binding .}" Clicked="OnPlaylistPlayClicked" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </ContentPage.Resources>
+
+    <Grid RowDefinitions="Auto,*,Auto,Auto">
+        <Grid Grid.Row="0" Padding="22,16,22,12" ColumnDefinitions="*,Auto">
+            <VerticalStackLayout Spacing="2">
+                <Label Text="SONORA" FontSize="19" FontAttributes="Bold" CharacterSpacing="2"
+                       TextColor="#F4F6F2" />
+                <Label Text="YOUR MUSIC, EVERYWHERE" FontSize="9" CharacterSpacing="1.7"
+                       TextColor="{StaticResource Muted}" />
+            </VerticalStackLayout>
+            <Border Grid.Column="1" HeightRequest="40" WidthRequest="40" StrokeThickness="0"
+                    BackgroundColor="#18211A" StrokeShape="RoundRectangle 20">
+                <Label Text="♫" FontSize="19" TextColor="{StaticResource Accent}"
+                       HorizontalOptions="Center" VerticalOptions="Center" />
+            </Border>
+        </Grid>
+
+        <Grid x:Name="TabContent" Grid.Row="1">
+            <ScrollView x:Name="NowPlayingPanel" IsVisible="True">
+                <VerticalStackLayout Padding="22,8,22,18" Spacing="18">
+                    <VerticalStackLayout Spacing="4">
+                        <Label Text="Now playing" FontSize="27" FontAttributes="Bold" TextColor="#F4F6F2" />
+                        <Label Text="A little room for the music." FontSize="13" TextColor="{StaticResource Muted}" />
+                    </VerticalStackLayout>
+
+                    <Border HeightRequest="265" StrokeThickness="0" StrokeShape="RoundRectangle 26">
+                        <Border.Background>
+                            <LinearGradientBrush EndPoint="1,1">
+                                <GradientStop Color="#284335" Offset="0" />
+                                <GradientStop Color="#1C2928" Offset="0.55" />
+                                <GradientStop Color="#303024" Offset="1" />
+                            </LinearGradientBrush>
+                        </Border.Background>
+                        <Grid>
+                            <Ellipse WidthRequest="210" HeightRequest="210" HorizontalOptions="End"
+                                     VerticalOptions="Start" Margin="0,-50,-65,0" Opacity="0.16"
+                                     Fill="{StaticResource Accent}" />
+                            <Ellipse WidthRequest="145" HeightRequest="145" HorizontalOptions="Start"
+                                     VerticalOptions="End" Margin="-48,0,0,-52" Opacity="0.1"
+                                     Fill="#D5E4BD" />
+                            <VerticalStackLayout HorizontalOptions="Center" VerticalOptions="Center" Spacing="12">
+                                <Label Text="♫" FontSize="76" TextColor="{StaticResource Accent}"
+                                       HorizontalTextAlignment="Center" />
+                                <Label Text="LOCAL SOUNDTRACK" FontSize="10" CharacterSpacing="2.4"
+                                       TextColor="#D1D8C8" HorizontalTextAlignment="Center" />
+                            </VerticalStackLayout>
+                            <Border HorizontalOptions="Start" VerticalOptions="Start" Margin="16"
+                                    Padding="10,5" StrokeThickness="0" BackgroundColor="#26362E"
+                                    StrokeShape="RoundRectangle 12">
+                                <Label Text="ON DEVICE" FontSize="9" CharacterSpacing="1.1"
+                                       TextColor="{StaticResource Accent}" />
+                            </Border>
+                        </Grid>
+                    </Border>
+
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                        <VerticalStackLayout Spacing="4" VerticalOptions="Center">
+                            <Label x:Name="NowPlayingTitle" Text="Choose a song" FontSize="21"
+                                   FontAttributes="Bold" TextColor="#F4F6F2" LineBreakMode="TailTruncation" />
+                            <Label x:Name="NowPlayingArtist" Text="Your library is ready when you are"
+                                   FontSize="14" TextColor="{StaticResource Muted}" LineBreakMode="TailTruncation" />
+                        </VerticalStackLayout>
+                        <Button x:Name="CurrentFavoriteButton" Grid.Column="1" Text="♡" FontSize="26"
+                                BackgroundColor="Transparent" TextColor="{StaticResource Accent}"
+                                Clicked="OnCurrentFavoriteClicked" />
+                    </Grid>
+
+                    <VerticalStackLayout Spacing="3">
+                        <Slider x:Name="PlaybackSlider" Minimum="0" Maximum="1" Value="0"
+                                ThumbColor="{StaticResource Accent}" MinimumTrackColor="{StaticResource Accent}"
+                                MaximumTrackColor="#30383D" ValueChanged="OnPlaybackSliderChanged" />
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Label x:Name="PlaybackPosition" Text="0:00" FontSize="11" TextColor="{StaticResource Muted}" />
+                            <Label x:Name="PlaybackDuration" Grid.Column="1" Text="0:00" FontSize="11"
+                                   TextColor="{StaticResource Muted}" />
+                        </Grid>
+                    </VerticalStackLayout>
+
+                    <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="12" HorizontalOptions="Center">
+                        <Button Grid.Column="0" Text="|◀" FontSize="21" BackgroundColor="Transparent"
+                                TextColor="#D9DED8" Clicked="OnPreviousClicked" />
+                        <Button x:Name="PlayPauseButton" Grid.Column="1" Text="▶" FontSize="22"
+                                WidthRequest="58" HeightRequest="58" Padding="0" CornerRadius="29"
+                                BackgroundColor="{StaticResource Accent}" TextColor="#11170D"
+                                Clicked="OnPlayPauseClicked" />
+                        <Button Grid.Column="2" Text="▶|" FontSize="21" BackgroundColor="Transparent"
+                                TextColor="#D9DED8" Clicked="OnNextClicked" />
+                        <Button Grid.Column="3" Text="■" FontSize="18" BackgroundColor="Transparent"
+                                TextColor="#8C969D" Clicked="OnStopClicked" />
+                    </Grid>
+                </VerticalStackLayout>
+            </ScrollView>
+
+            <Grid x:Name="LibraryPanel" IsVisible="False" Padding="22,8,22,8"
+                  RowDefinitions="Auto,Auto,Auto,*">
+                <VerticalStackLayout Spacing="4">
+                    <Label Text="Your library" FontSize="27" FontAttributes="Bold" TextColor="#F4F6F2" />
+                    <Label x:Name="LibraryStatusLabel" Text="Indexed on this device" FontSize="13"
+                           TextColor="{StaticResource Muted}" />
+                </VerticalStackLayout>
+                <Border Grid.Row="2" Margin="0,17,0,10" Padding="16" BackgroundColor="#18221B"
+                        Stroke="#27352A" StrokeThickness="1" StrokeShape="RoundRectangle 18">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <VerticalStackLayout Spacing="3">
+                            <Label Text="YOUR COLLECTION" FontSize="9" CharacterSpacing="1.5"
+                                   TextColor="{StaticResource Accent}" />
+                            <Label x:Name="LibraryCountLabel" Text="0 songs" FontSize="16"
+                                   FontAttributes="Bold" TextColor="#F4F6F2" />
+                        </VerticalStackLayout>
+                        <Label Grid.Column="1" Text="♫" FontSize="25" TextColor="{StaticResource Accent}"
+                               VerticalOptions="Center" />
+                    </Grid>
+                </Border>
+                <CollectionView x:Name="LibraryList" Grid.Row="3" ItemTemplate="{StaticResource TrackTemplate}"
+                                SelectionMode="None" ItemsUpdatingScrollMode="KeepItemsInView">
+                    <CollectionView.EmptyView>
+                        <Label Text="Your songs will appear here after the library is indexed."
+                               FontSize="13" TextColor="{StaticResource Muted}" Margin="4,18" />
+                    </CollectionView.EmptyView>
+                </CollectionView>
+            </Grid>
+
+            <Grid x:Name="SearchPanel" IsVisible="False" Padding="22,8,22,8"
+                  RowDefinitions="Auto,Auto,Auto,*">
+                <VerticalStackLayout Spacing="4">
+                    <Label Text="Find your sound" FontSize="27" FontAttributes="Bold" TextColor="#F4F6F2" />
+                    <Label Text="Search songs, artists, and albums" FontSize="13" TextColor="{StaticResource Muted}" />
+                </VerticalStackLayout>
+                <Border Grid.Row="1" Margin="0,18,0,12" Padding="12,0" BackgroundColor="#171D21"
+                        Stroke="#2A3338" StrokeThickness="1" StrokeShape="RoundRectangle 15">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                        <Label Text="⌕" FontSize="23" TextColor="{StaticResource Accent}" VerticalOptions="Center" />
+                        <Entry x:Name="SearchEntry" Grid.Column="1" Placeholder="Track, artist, or album"
+                               PlaceholderColor="#778188" TextColor="#F4F6F2" BackgroundColor="Transparent"
+                               ClearButtonVisibility="WhileEditing" ReturnType="Search"
+                               TextChanged="OnSearchTextChanged" />
+                    </Grid>
+                </Border>
+                <Label x:Name="SearchResultsLabel" Grid.Row="2" Text="YOUR MUSIC" FontSize="10"
+                       CharacterSpacing="1.4" TextColor="{StaticResource Muted}" Margin="2,0,0,4" />
+                <CollectionView x:Name="SearchResultsList" Grid.Row="3"
+                                ItemTemplate="{StaticResource TrackTemplate}" SelectionMode="None">
+                    <CollectionView.EmptyView>
+                        <Label Text="No matching tracks found." FontSize="13"
+                               TextColor="{StaticResource Muted}" Margin="4,18" />
+                    </CollectionView.EmptyView>
+                </CollectionView>
+            </Grid>
+
+            <Grid x:Name="FavoritesPanel" IsVisible="False" Padding="22,8,22,8"
+                  RowDefinitions="Auto,Auto,*">
+                <VerticalStackLayout Spacing="4">
+                    <Label Text="Favorites" FontSize="27" FontAttributes="Bold" TextColor="#F4F6F2" />
+                    <Label Text="The tracks you keep close." FontSize="13" TextColor="{StaticResource Muted}" />
+                </VerticalStackLayout>
+                <Border Grid.Row="1" Margin="0,17,0,10" Padding="16" BackgroundColor="#231B1C"
+                        Stroke="#392A2B" StrokeThickness="1" StrokeShape="RoundRectangle 18">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <VerticalStackLayout Spacing="3">
+                            <Label Text="SAVED FOR YOU" FontSize="9" CharacterSpacing="1.5" TextColor="#F2A5A2" />
+                            <Label x:Name="FavoritesCountLabel" Text="0 songs" FontSize="16"
+                                   FontAttributes="Bold" TextColor="#F4F6F2" />
+                        </VerticalStackLayout>
+                        <Label Grid.Column="1" Text="♥" FontSize="23" TextColor="#F2A5A2"
+                               VerticalOptions="Center" />
+                    </Grid>
+                </Border>
+                <CollectionView x:Name="FavoritesList" Grid.Row="2"
+                                ItemTemplate="{StaticResource TrackTemplate}" SelectionMode="None">
+                    <CollectionView.EmptyView>
+                        <Label Text="Tap the heart beside a song to save it here."
+                               FontSize="13" TextColor="{StaticResource Muted}" Margin="4,18" />
+                    </CollectionView.EmptyView>
+                </CollectionView>
+            </Grid>
+
+            <Grid x:Name="PlaylistsPanel" IsVisible="False" Padding="22,8,22,8"
+                  RowDefinitions="Auto,Auto,*">
+                <Grid ColumnDefinitions="*,Auto">
+                    <VerticalStackLayout Spacing="4">
+                        <Label Text="Playlists" FontSize="27" FontAttributes="Bold" TextColor="#F4F6F2" />
+                        <Label Text="Make a mix for every mood." FontSize="13" TextColor="{StaticResource Muted}" />
+                    </VerticalStackLayout>
+                    <Button Grid.Column="1" Text="＋" FontSize="25" WidthRequest="48" HeightRequest="48"
+                            Padding="0" CornerRadius="16" BackgroundColor="#26352A"
+                            TextColor="{StaticResource Accent}" Clicked="OnCreatePlaylistClicked" />
+                </Grid>
+                <Border Grid.Row="1" Margin="0,17,0,10" Padding="14" BackgroundColor="#171D21"
+                        Stroke="#2A3338" StrokeThickness="1" StrokeShape="RoundRectangle 16">
+                    <Label Text="Tap + beside a song to add it to a playlist." FontSize="12"
+                           TextColor="#A6AFAB" />
+                </Border>
+                <CollectionView x:Name="PlaylistsList" Grid.Row="2"
+                                ItemTemplate="{StaticResource PlaylistTemplate}" SelectionMode="None">
+                    <CollectionView.EmptyView>
+                        <Label Text="Create a playlist with the + button above."
+                               FontSize="13" TextColor="{StaticResource Muted}" Margin="4,18" />
+                    </CollectionView.EmptyView>
+                </CollectionView>
+            </Grid>
+        </Grid>
+
+        <VerticalStackLayout x:Name="AccessPanel" Grid.Row="1" IsVisible="False"
+                             Padding="30" Spacing="16" VerticalOptions="Center">
+            <Border HeightRequest="84" WidthRequest="84" StrokeThickness="0" BackgroundColor="#1B2A20"
+                    StrokeShape="RoundRectangle 28" HorizontalOptions="Center">
+                <Label Text="♫" FontSize="38" TextColor="{StaticResource Accent}"
+                       HorizontalOptions="Center" VerticalOptions="Center" />
+            </Border>
+            <Label Text="Your music, ready to go" FontSize="25" FontAttributes="Bold"
+                   TextColor="#F4F6F2" HorizontalTextAlignment="Center" />
+            <Label x:Name="AccessStatusLabel"
+                   Text="Allow access to audio on your device to build your library and play music in the car."
+                   FontSize="14" LineHeight="1.35" TextColor="{StaticResource Muted}"
+                   HorizontalTextAlignment="Center" />
+            <Button Text="Connect my library" Clicked="OnGrantAccessClicked" HeightRequest="52"
+                    CornerRadius="18" BackgroundColor="{StaticResource Accent}" TextColor="#11170D"
+                    FontAttributes="Bold" />
+        </VerticalStackLayout>
+
+        <Border x:Name="MiniPlayer" Grid.Row="2" IsVisible="False" Margin="16,4,16,8" Padding="10,8"
+                BackgroundColor="#1B2225" Stroke="#303A3C" StrokeThickness="1"
+                StrokeShape="RoundRectangle 16">
+            <Grid ColumnDefinitions="40,*,Auto" ColumnSpacing="10">
+                <Border HeightRequest="38" WidthRequest="38" StrokeThickness="0" BackgroundColor="#29362C"
+                        StrokeShape="RoundRectangle 11">
+                    <Label Text="♫" FontSize="18" TextColor="{StaticResource Accent}"
+                           HorizontalOptions="Center" VerticalOptions="Center" />
+                </Border>
+                <VerticalStackLayout Grid.Column="1" Spacing="2" VerticalOptions="Center">
+                    <Label x:Name="MiniPlayerTitle" Text="Now playing" FontSize="12" FontAttributes="Bold"
+                           TextColor="#F4F6F2" LineBreakMode="TailTruncation" />
+                    <Label x:Name="MiniPlayerArtist" Text="" FontSize="10" TextColor="{StaticResource Muted}"
+                           LineBreakMode="TailTruncation" />
+                </VerticalStackLayout>
+                <Button x:Name="MiniPlayerPlayPauseButton" Grid.Column="2" Text="▶" WidthRequest="40"
+                        Padding="0" BackgroundColor="Transparent" TextColor="{StaticResource Accent}"
+                        Clicked="OnPlayPauseClicked" />
+                <Grid.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnMiniPlayerTapped" />
+                </Grid.GestureRecognizers>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="3" Padding="8,7,8,12" ColumnDefinitions="*,*,*,*,*"
+              BackgroundColor="#111518">
+            <Button x:Name="NowTabButton" Grid.Column="0" Text="♫&#10;NOW" FontSize="10" Clicked="OnTabClicked"
+                    CommandParameter="Now" Padding="0,5" CornerRadius="14" BackgroundColor="#202923"
+                    TextColor="{StaticResource Accent}" />
+            <Button x:Name="LibraryTabButton" Grid.Column="1" Text="▤&#10;LIBRARY" FontSize="10" Clicked="OnTabClicked"
+                    CommandParameter="Library" Padding="0,5" CornerRadius="14" BackgroundColor="Transparent"
+                    TextColor="{StaticResource Muted}" />
+            <Button x:Name="SearchTabButton" Grid.Column="2" Text="⌕&#10;SEARCH" FontSize="10" Clicked="OnTabClicked"
+                    CommandParameter="Search" Padding="0,5" CornerRadius="14" BackgroundColor="Transparent"
+                    TextColor="{StaticResource Muted}" />
+            <Button x:Name="FavoritesTabButton" Grid.Column="3" Text="♡&#10;SAVED" FontSize="10" Clicked="OnTabClicked"
+                    CommandParameter="Favorites" Padding="0,5" CornerRadius="14" BackgroundColor="Transparent"
+                    TextColor="{StaticResource Muted}" />
+            <Button x:Name="PlaylistsTabButton" Grid.Column="4" Text="☷&#10;MIXES" FontSize="10" Clicked="OnTabClicked"
+                    CommandParameter="Playlists" Padding="0,5" CornerRadius="14" BackgroundColor="Transparent"
+                    TextColor="{StaticResource Muted}" />
+        </Grid>
+    </Grid>
 </ContentPage>

@@ -16,6 +16,7 @@ public static class MauiProgram
 			});
 		builder.Services.AddSingleton<IMusicLibraryService>(AndroidMusicLibraryService.Instance);
 		builder.Services.AddSingleton<IMusicSearchService, MusicSearchService>();
+		builder.Services.AddSingleton<PhoneMusicCollectionStore>();
 
 #if DEBUG
 		builder.Logging.AddDebug();

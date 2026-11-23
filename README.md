@@ -25,6 +25,11 @@ The media session advertises play, pause, stop, seek, and available skip actions
 to Android Auto. Previous-track control restarts the current track when it has
 played for more than three seconds; otherwise it moves to the previous queued track.
 
+On the phone, the app provides Now Playing, Library, Search, Favorites, and
+Playlists sections. Search uses the same local index and fuzzy matching as
+Android Auto voice requests. Favorites and playlists are stored locally; tracks
+can be added to playlists from the library or search results.
+
 Playback runs in a media-playback foreground service with a MediaStyle notification
 linked to the session. ExoPlayer handles audio focus, and the current track and
 playback position are periodically saved so playback can be restored if Android
